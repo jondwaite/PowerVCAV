@@ -31,6 +31,7 @@ Install-Module PowerVCAV -Scope CurrentUser
 ```
 
 or globally using:
+
 ```PowerShell
 Install-Module PowerVCAV
 ```

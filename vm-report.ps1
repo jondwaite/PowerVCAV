@@ -61,7 +61,8 @@ foreach ($rep in $unique_replications.Values) {
     $instances = Invoke-VCAVQuery -QueryPath "vm-replications/$($rep.id)/instances"
     
     # Calculate average daily xfer size based on recorded instances and RPO
-    # NOTE: This will give 
+    # NOTE: This will give innaccurate results during the first 24hrs of
+    # replication due to the generally large size of initial VM sync.
     $numinstances = $instances.Count
     $repsperday = (24 / ($rep.settings.rpo / 60))
     $totalxfer = ($instances | Measure-Object -Property transferBytes -Sum).Sum
