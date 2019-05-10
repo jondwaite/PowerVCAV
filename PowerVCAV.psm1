@@ -9,8 +9,8 @@
 #
 # Copyright 2019 Jon Waite, All Rights Reserved
 # Released under MIT License - see https://opensource.org/licenses/MIT
-# Date:         8th May 2019
-# Version:      0.1.3
+# Date:         10th May 2019
+# Version:      0.2.0
 #
 
 Function Connect-VCAV {
@@ -115,8 +115,8 @@ Connect-VCAV can be re-used to establish a new session.
     [CmdletBinding()]
     param ()
 
-    $VCAVHost = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVHost').ToString()
-    $VCAVToken = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken').ToString()
+    $VCAVHost = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVHost')
+    $VCAVToken = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken')
 
     # Clear session state variables:
     $PSCmdlet.SessionState.PSVariable.Remove('VCAVHost')
@@ -178,8 +178,7 @@ can be obtained using the Invoke-VCAVQuery cmdlet with -QueryPath of 'sites'.
         return
     } 
 
-    $VCAVHost = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVHost').ToString()
-    $VCAVToken = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken').ToString()
+    $VCAVHost = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVHost')
 
     $AuthBody = [PSCustomObject]@{
         type   = "cookie"
@@ -187,7 +186,9 @@ can be obtained using the Invoke-VCAVQuery cmdlet with -QueryPath of 'sites'.
         cookie = $vCDSecret
     } | ConvertTo-Json -Compress
 
-    $VCAVHeader = @{'X-VCAV-Auth' = $($VCAVToken) }
+    $Token = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken')
+    if ($Token -is [array]) { $Token = $Token[0] }
+    $VCAVHeader = @{'X-VCAV-Auth' = $Token }
 
     Try {
         Invoke-WebRequest -Uri "https://$VCAVHost/sessions/extend" -Method Post -Headers $VCAVHeader -Body $AuthBody -ContentType 'application/json' -ErrorAction Stop | Out-Null
@@ -217,7 +218,9 @@ If no session is currently connected an empty string will be returned.
 #>
     [CmdletBinding()]
     param()
-    return $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken').ToString()
+    $Token = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken')
+    if ($Token -is [array]) { $Token = $Token[0] }
+    return $Token
 }
 
 Function Invoke-VCAVPagedQuery {
@@ -346,7 +349,9 @@ the Invoke-VCAVPagedQuery cmdlet to ensure that all results are retrieved.
     }
     
     if (! ($Headers.ContainsKey('X-VCAV-Auth'))) {
-        $Headers.Add('X-VCAV-Auth', $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken').ToString())
+        $Token = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken')
+        if ($Token -is [array]) { $Token = $Token[0] }
+        $Headers.Add('X-VCAV-Auth', $Token)
     }
 
     if (! ($Headers.ContainsKey('Accept'))) {
@@ -380,7 +385,7 @@ Function New-VCAVUrl {
         [Parameter()][hashtable]$Filter
     )
 
-    $QueryString = "https://$($PSCmdlet.SessionState.PSVariable.GetValue('VCAVHost').ToString())/$QueryPath"
+    $QueryString = "https://$($PSCmdlet.SessionState.PSVariable.GetValue('VCAVHost'))/$QueryPath"
 
     if ($Filter) {
         $FirstParam = $true
