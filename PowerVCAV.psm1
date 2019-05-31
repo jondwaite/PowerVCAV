@@ -9,8 +9,8 @@
 #
 # Copyright 2019 Jon Waite, All Rights Reserved
 # Released under MIT License - see https://opensource.org/licenses/MIT
-# Date:         10th May 2019
-# Version:      0.2.0
+# Date:         31st May 2019
+# Version:      0.2.1
 #
 
 Function Connect-VCAV {
@@ -47,7 +47,7 @@ in the $Global:DefaultCIServers array.
     )
      
     # Check if we are already connected to this VCAVHost:
-    if ($PSCmdlet.SessionState.PSVariable.GetValue('VCAVIsConnected') -eq $true) {
+    if ($Script:VCAVIsConnected -eq $true) {
         Write-Error ("Already connected to VCAV, logout before attempting to login again")
         return
     }
@@ -84,14 +84,14 @@ in the $Global:DefaultCIServers array.
     }
     catch {
         Write-Error ("Could not connect to vCloud Availability, error message: " + $_.Exception.Message)
-        $PSCmdlet.SessionState.PSVariable.Set('VCAVIsConnected', $false)
+        $Script:VCAVIsConnected = $false
         Break
     }
-    $VCAVToken = $PriVCAV.Headers.'X-VCAV-Auth'
-    $PSCmdlet.SessionState.PSVariable.Set('VCAVHost', $VCAVHost)
-    $PSCmdlet.SessionState.PSVariable.Set('VCAVIsConnected', $true)
-    $PSCmdlet.SessionState.PSVariable.Set('VCAVToken', $VCAVToken)
-    $PSCmdlet.SessionState.PSVariable.Set('VCDPriHost', $VCDHost)
+    
+    $Script:VCAVHost = $VCAVHost
+    $Script:VCAVIsConnected = $true
+    $Script:VCAVToken = $PriVCAV.Headers.'X-VCAV-Auth'
+    $Script:VCDPriHost = $VCDHost
     Write-Host -ForegroundColor Green ("Logged in to VCAV successfully")
     return
 }
@@ -115,18 +115,21 @@ Connect-VCAV can be re-used to establish a new session.
     [CmdletBinding()]
     param ()
 
-    $VCAVHost = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVHost')
-    $VCAVToken = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken')
-
-    # Clear session state variables:
-    $PSCmdlet.SessionState.PSVariable.Remove('VCAVHost')
-    $PSCmdlet.SessionState.PSVariable.Remove('VCAVToken')
-    $PSCmdlet.SessionState.PSVariable.Remove('VCAVIsConnected')
-    $PSCmdlet.SessionState.PSVariable.Remove('VCDPriHost')
-
+    if (!$Script:VCAVHost) {
+        Write-Error ("Can't find session, exiting.")
+        exit
+    }
+    $Uri = "https://$Script:VCAVHost/sessions"
     $VCAHeader = @{'X-VCAV-Auth' = $($VCAVToken) }
+    
+    # Clear session state variables:
+    if ($Script:VCAVHost) { Remove-Variable -Scope Script -Name VCAVHost -Confirm:$false }
+    if ($Script:VCAVToken) { Remove-Variable -Scope Script -Name VCAVToken -Confirm:$false }
+    if ($Script:VCAVIsConnected) { Remove-Variable -Scope Script -Name VCAVIsConnected -Confirm:$false }
+    if ($Script:VCDPriHost) { Remove-Variable -Scope Script -Name VCDPriHost -Confirm:$false }
+    
     Try {
-        Invoke-WebRequest -Uri "https://$VCAVHost/sessions" -Method Delete -Headers $VCAHeader -ErrorAction Stop | Out-Null
+        Invoke-WebRequest -Uri $Uri -Method Delete -Headers $VCAHeader -ErrorAction Stop | Out-Null
     }
     Catch {
         Write-Error ("ERROR: " + $_.Exception.Message)
@@ -169,7 +172,7 @@ can be obtained using the Invoke-VCAVQuery cmdlet with -QueryPath of 'sites'.
         [Parameter(Mandatory = $true)][string]$VCAVSiteName,
         [Parameter(Mandatory = $true)][string]$VCDHost
     )
-    if ($PSCmdlet.SessionState.PSVariable.GetValue('VCAVIsConnected') -ne $true) # Not authenticated to API
+    if ($Script:VCAVIsConnected -ne $true) # Not authenticated to API
     { Write-Error ("VCAV not logged in, cannot extend to another site, use Connect-VCAV first."); return }
 
     $vCDSecret = ($Global:DefaultCIServers | Where-Object { $_.Name -eq $VCDHost }).SessionSecret
@@ -178,20 +181,16 @@ can be obtained using the Invoke-VCAVQuery cmdlet with -QueryPath of 'sites'.
         return
     } 
 
-    $VCAVHost = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVHost')
-
     $AuthBody = [PSCustomObject]@{
         type   = "cookie"
         site   = $VCAVSiteName
         cookie = $vCDSecret
     } | ConvertTo-Json -Compress
 
-    $Token = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken')
-    if ($Token -is [array]) { $Token = $Token[0] }
-    $VCAVHeader = @{'X-VCAV-Auth' = $Token }
+    $VCAVHeader = @{'X-VCAV-Auth' = $Script:VCAVToken }
 
     Try {
-        Invoke-WebRequest -Uri "https://$VCAVHost/sessions/extend" -Method Post -Headers $VCAVHeader -Body $AuthBody -ContentType 'application/json' -ErrorAction Stop | Out-Null
+        Invoke-WebRequest -Uri "https://$Script:VCAVHost/sessions/extend" -Method Post -Headers $VCAVHeader -Body $AuthBody -ContentType 'application/json' -ErrorAction Stop | Out-Null
     }
     Catch {
         Write-Error ("ERROR: " + $_.Exception.Message)
@@ -218,9 +217,7 @@ If no session is currently connected an empty string will be returned.
 #>
     [CmdletBinding()]
     param()
-    $Token = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken')
-    if ($Token -is [array]) { $Token = $Token[0] }
-    return $Token
+    return $Script:VCAVToken
 }
 
 Function Invoke-VCAVPagedQuery {
@@ -336,7 +333,7 @@ the Invoke-VCAVPagedQuery cmdlet to ensure that all results are retrieved.
         [Parameter()][string]$Body
     )
 
-    if ($PSCmdlet.SessionState.PSVariable.GetValue('VCAVIsConnected') -ne $true) # Not authenticated to API
+    if ($Script:VCAVIsConnected -ne $true) # Not authenticated to API
     { Write-Error ("Not connected to VCAV API, authenticate first with Connect-VCAV"); Break }
     
     if (!$Uri) {
@@ -349,9 +346,7 @@ the Invoke-VCAVPagedQuery cmdlet to ensure that all results are retrieved.
     }
     
     if (! ($Headers.ContainsKey('X-VCAV-Auth'))) {
-        $Token = $PSCmdlet.SessionState.PSVariable.GetValue('VCAVToken')
-        if ($Token -is [array]) { $Token = $Token[0] }
-        $Headers.Add('X-VCAV-Auth', $Token)
+        $Headers.Add('X-VCAV-Auth', $Script:VCAVToken)
     }
 
     if (! ($Headers.ContainsKey('Accept'))) {
@@ -385,7 +380,7 @@ Function New-VCAVUrl {
         [Parameter()][hashtable]$Filter
     )
 
-    $QueryString = "https://$($PSCmdlet.SessionState.PSVariable.GetValue('VCAVHost'))/$QueryPath"
+    $QueryString = "https://$Script:VCAVHost/$QueryPath"
 
     if ($Filter) {
         $FirstParam = $true
