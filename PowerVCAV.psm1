@@ -9,8 +9,8 @@
 #
 # Copyright 2019 Jon Waite, All Rights Reserved
 # Released under MIT License - see https://opensource.org/licenses/MIT
-# Date:         31st May 2019
-# Version:      0.2.1
+# Date:         1st June 2019
+# Version:      0.2.2
 #
 
 Function Connect-VCAV {
@@ -90,7 +90,11 @@ in the $Global:DefaultCIServers array.
     
     $Script:VCAVHost = $VCAVHost
     $Script:VCAVIsConnected = $true
-    $Script:VCAVToken = $PriVCAV.Headers.'X-VCAV-Auth'
+    if ($PriVCAV.Headers.'X-VCAV-Auth' -is [Array]) {
+        $Script:VCAVToken = $PriVCAV.Headers.'X-VCAV-Auth'[0]
+    } else {
+        $Script:VCAVToken = $PriVCAV.Headers.'X-VCAV-Auth'
+    }
     $Script:VCDPriHost = $VCDHost
     Write-Host -ForegroundColor Green ("Logged in to VCAV successfully")
     return
@@ -360,7 +364,6 @@ the Invoke-VCAVPagedQuery cmdlet to ensure that all results are retrieved.
     }
     if ($ContentType) { $InvokeParams.ContentType = $ContentType }
     if ($Body) { $InvokeParams.Body = $Body }
-
     Try {
         $result = Invoke-RestMethod @InvokeParams -ErrorAction Stop
         return $result
