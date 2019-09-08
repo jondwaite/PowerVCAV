@@ -9,8 +9,8 @@
 #
 # Copyright 2019 Jon Waite, All Rights Reserved
 # Released under MIT License - see https://opensource.org/licenses/MIT
-# Date:         1st June 2019
-# Version:      0.2.2
+# Date:         9th September 2019
+# Version:      0.2.3
 #
 
 Function Connect-VCAV {
@@ -366,7 +366,12 @@ the Invoke-VCAVPagedQuery cmdlet to ensure that all results are retrieved.
     if ($Body) { $InvokeParams.Body = $Body }
     Try {
         $result = Invoke-RestMethod @InvokeParams -ErrorAction Stop
-        return $result
+
+        if ($result.GetType().Name -eq "String") {
+            ConvertFrom-Json -InputObject $result
+        } else {
+            $result
+        }
     }
     Catch {
         Write-Error ("vCloud Availability API error: $($_.Exception.Message)")
